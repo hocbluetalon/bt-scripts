@@ -1,0 +1,77 @@
+curl -u btadminuser:P@ssw0rd --header "Content-type: application/json" --request PUT http://localhost:8111/PolicyManagement/1.0/resource_domains/global/map --data '[{
+    "name": "maptest1"
+}]'
+ 
+ 
+curl -u btadminuser:P@ssw0rd --header "Content-type:application/json" --request PUT http://localhost:8111/PolicyManagement/1.0/resource_domains/cdh_hive/map --data '{"mapping":[{"virtualresource": "maptest1","physicalresource": ["sales.sales.accounts"]}]}'
+curl -u btadminuser:P@ssw0rd --header "Content-type:application/json" --request PUT http://localhost:8111/PolicyManagement/1.0/resource_domains/cdh_hive/map --data '{"mapping":[{"virtualresource": "maptest1","physicalresource": ["acmehealth.acmehealth.members"]}]}'
+ 
+ 
+curl -u btadminuser:P@ssw0rd --header "Content-type:application/json" --request PUT http://localhost:8111/PolicyManagement/1.0/resource_domains/cdh_hive/map --data '{"mapping":[{"virtualresource": "maptest1.ssn","physicalresource": ["sales.sales.accounts.SOC_SEC_NO"]}]}'
+curl -u btadminuser:P@ssw0rd --header "Content-type:application/json" --request PUT http://localhost:8111/PolicyManagement/1.0/resource_domains/cdh_hive/map --data '{"mapping":[{"virtualresource": "maptest1.ssn","physicalresource": ["acmehealth.acmehealth.members.ssn"]}]}'
+
+
+curl -u btadminuser:P@ssw0rd --header "Content-type:application/json" --request PUT http://localhost:8111/PolicyManagement/1.0/resource_domains/cdh_hive/map --data '{"mapping":[{"virtualresource": "maptest1.name","physicalresource": ["sales.sales.accounts.name"]}]}'
+curl -u btadminuser:P@ssw0rd --header "Content-type:application/json" --request PUT http://localhost:8111/PolicyManagement/1.0/resource_domains/cdh_hive/map --data '{"mapping":[{"virtualresource": "maptest1.name","physicalresource": ["acmehealth.acmehealth.members.name"]}]}'
+
+
+
+Test:
+beeline -u jdbc:hive2://localhost:10010/acmehealth -n bob -p bluetalon -e "select name,ssn from members limit 1"
+beeline -u jdbc:hive2://localhost:10010/sales -n bob -p bluetalon -e "select name,soc_sec_no from accounts limit 1"
+
+
+
+Check if there are rules on the virtual resources:
+column_list=$(export PGPASSWORD='bt#123';psql -h 127.0.0.1 -p 5433 -d btuirepo -U btuiuser -P "footer=off" -t -c "select distinct split_part(mappedname, '.', 2) from arcnamesmapext where split_part(mappedname, '.', 1) = upper('MAPTEST1');")
+
+for value in $column_list
+do
+    echo "http://localhost:8111/PolicyManagement/1.0/resources/btdefault.PUBLIC.MAPTEST1.$value"
+done
+
+
+check_policies=$(curl -u btadminuser:P@ssw0rd --header "Content-type:application/json" --request GET http://localhost:8111/PolicyManagement/1.0/resources/btdefault.PUBLIC.MAPTEST1.*/policies)
+if echo "$check_policies" | grep -q "policySetName"; then
+    echo "MATCH"
+    echo $check_policies
+else
+    echo "NO MATCH"
+fi
+
+
+
+export PGPASSWORD='bt#123';psql -h 127.0.0.1 -p 5433 -d btuirepo -U btuiuser
+
+
+The following 5 tables need to be looked at and delete rows:
+ 
+arccompositdstc
+MAPTEST1,65,T,,,,
+select * from arccompositdstc where arcdstcname=upper('maptest1');
+Delete:
+delete from arccompositdstc where arcdstcname=upper('maptest1');
+
+arccompositschema
+1.1.65.-1,,,-1,65,1,1,,,,,
+database.schema_seq_num.table_seq.col_seq
+select * from arccompositschema where dstcseqt=(select dstcseq from arccompositdstc where arcdstcname=upper('maptest1'));
+Delete:
+delete from arccompositschema where dstcseqt=(select dstcseq from arccompositdstc where arcdstcname=upper('maptest1'));
+
+arccompositschemaext - only appear when create a rule on the physical resource
+ 
+
+arcnamesmap
+mappedname=MAPTEST1
+select * from arcnamesmap where mappedname=upper('maptest1');
+Delete:
+delete from arcnamesmap where mappedname=upper('maptest1');
+
+ 
+arcnamesmapext
+mappedname=MAPTEST1.SSN
+-> mappedname=MAPTEST1.COLUMN_NAME
+select * from arcnamesmapext where split_part(mappedname, '.', 1) = upper('MAPTEST1');
+Delete:
+delete from arcnamesmapext where split_part(mappedname, '.', 1) = upper('MAPTEST1');
