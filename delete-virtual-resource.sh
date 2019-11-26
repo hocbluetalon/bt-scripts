@@ -6,13 +6,11 @@ else
 	echo ""
 	HAS_RULE=0
 	virtual_resource_table="$1"
-
 	virtual_column_list=$(psql -h 127.0.0.1 -p 5433 -d btuirepo -U btuiuser -P "footer=off" -t -c "select distinct split_part(mappedname, '.', 2) from arcnamesmapext where split_part(mappedname, '.', 1) = upper('$virtual_resource_table');")
 
 	for value in $virtual_column_list
 	do
 	    check_policies_on_column=$(curl --silent -u btadminuser:P@ssw0rd --header "Content-type:application/json" --request GET "http://localhost:8111/PolicyManagement/1.0/resources/btdefault.PUBLIC.$virtual_resource_table.$value/policies")
-
 		if echo "$check_policies_on_column" | grep -q "policySetName"; then
 		    echo "* The below policy still has rule(s) on the resource $virtual_resource_table.$value:"
 		    echo $check_policies_on_column | grep -Po '"policySetName":.*?[^\\]"'
@@ -38,8 +36,8 @@ else
 
 	delete_sql="delete from arcnamesmapext where split_part(mappedname, '.', 1) = upper('$virtual_resource_table');\
 	delete from arcnamesmap where mappedname=upper('$virtual_resource_table');\
-	delete from arccompositschema where dstcseqt=(select dstcseq from arccompositdstc where arcdstcname=upper('$virtual_resource_table'));\
-	delete from arccompositdstc where arcdstcname=upper('$virtual_resource_table');
+	delete from arccompositschema where dstcseqt=(select dstcseq from arccompositdstc where atype='T' and arcdstcname=upper('$virtual_resource_table'));\
+	delete from arccompositdstc where atype='T' and arcdstcname=upper('$virtual_resource_table');
 	"
 
 	psql -h 127.0.0.1 -p 5433 -d btuirepo -U btuiuser -c "$delete_sql"
